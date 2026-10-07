@@ -1,0 +1,105 @@
+name: Update Crypto Market Data
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-market-data:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Binance market data
+        run: |
+          mkdir -p data
+
+          curl -L \
+            "https://api.binance.com/api/v3/ticker/24hr" \
+            -o /tmp/tickers.json
+
+      - name: Build market JSON
+        run: |
+          python3 <<'PY'
+          import json
+          from datetime import datetime, timezone
+
+          symbols = [
+              "BTCUSDT","ETHUSDT","BNBUSDT","XRPUSDT","SOLUSDT",
+              "DOGEUSDT","ADAUSDT","AVAXUSDT","LINKUSDT","DOTUSDT",
+              "TRXUSDT","LTCUSDT","BCHUSDT","UNIUSDT","NEARUSDT",
+              "ETCUSDT","ATOMUSDT","FILUSDT","APTUSDT","ARBUSDT"
+          ]
+
+          with open("/tmp/tickers.json") as f:
+              raw = json.load(f)
+
+          wanted = {x["symbol"]: x for x in raw if x["symbol"] in symbols}
+
+          names = {
+              "BTCUSDT":"Bitcoin",
+              "ETHUSDT":"Ethereum",
+              "BNBUSDT":"BNB",
+              "XRPUSDT":"XRP",
+              "SOLUSDT":"Solana",
+              "DOGEUSDT":"Dogecoin",
+              "ADAUSDT":"Cardano",
+              "AVAXUSDT":"Avalanche",
+              "LINKUSDT":"Chainlink",
+              "DOTUSDT":"Polkadot",
+              "TRXUSDT":"TRON",
+              "LTCUSDT":"Litecoin",
+              "BCHUSDT":"Bitcoin Cash",
+              "UNIUSDT":"Uniswap",
+              "NEARUSDT":"NEAR Protocol",
+              "ETCUSDT":"Ethereum Classic",
+              "ATOMUSDT":"Cosmos",
+              "FILUSDT":"Filecoin",
+              "APTUSDT":"Aptos",
+              "ARBUSDT":"Arbitrum"
+          }
+
+          data = []
+
+          for rank, symbol in enumerate(symbols, 1):
+              if symbol not in wanted:
+                  continue
+
+              x = wanted[symbol]
+
+              data.append({
+                  "rank": rank,
+                  "symbol": symbol.replace("USDT",""),
+                  "name": names.get(symbol, symbol),
+                  "current_price": float(x["lastPrice"]),
+                  "price_change_percentage_24h": float(x["priceChangePercent"]),
+                  "volume_24h": float(x["quoteVolume"]),
+                  "high_24h": float(x["highPrice"]),
+                  "low_24h": float(x["lowPrice"]),
+                  "last_updated": datetime.now(timezone.utc).isoformat()
+              })
+
+          with open("data/market.json","w") as f:
+              json.dump(data,f,indent=2)
+
+          print("Updated",len(data),"coins")
+
+          PY
+
+      - name: Commit updated market data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add data/market.json
+
+          git diff --cached --quiet || \
+            git commit -m "Update crypto market data"
+
+          git push
