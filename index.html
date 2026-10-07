@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Crypto Top Gainers & Losers</title>
+<style>
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:Arial,sans-serif;
+  background:#080b12;
+  color:#e8edf5
+}
+.container{max-width:1200px;margin:auto;padding:20px}
+.header{
+  background:#111722;
+  border:1px solid #273142;
+  border-radius:16px;
+  padding:20px;
+  margin-bottom:18px
+}
+h1{margin:0 0 6px;font-size:25px}
+.sub{color:#8995a8;font-size:13px}
+.controls{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  margin:15px 0
+}
+button,input,select{
+  background:#121a27;
+  color:#e8edf5;
+  border:1px solid #303c4e;
+  border-radius:9px;
+  padding:10px 13px;
+  font-size:14px
+}
+button{cursor:pointer}
+button:hover{background:#1a2535}
+input{flex:1;min-width:180px}
+.stats{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:10px;
+  margin-bottom:18px
+}
+.stat{
+  background:#111722;
+  border:1px solid #273142;
+  border-radius:12px;
+  padding:15px
+}
+.stat b{display:block;font-size:20px;margin-top:5px}
+.label{color:#8995a8;font-size:12px}
+.grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:15px
+}
+.panel{
+  background:#111722;
+  border:1px solid #273142;
+  border-radius:15px;
+  overflow:hidden
+}
+.panel h2{
+  margin:0;
+  padding:16px;
+  font-size:18px;
+  border-bottom:1px solid #273142
+}
+.gain h2{color:#45df91}
+.loss h2{color:#ff6377}
+table{width:100%;border-collapse:collapse}
+th,td{
+  padding:12px 10px;
+  border-bottom:1px solid #202938;
+  text-align:left;
+  font-size:13px
+}
+th{color:#8290a5;font-size:11px;text-transform:uppercase}
+tr:hover{background:#151d2a}
+.coin{font-weight:bold}
+.symbol{color:#7f8da2;font-size:11px}
+.up{color:#45df91;font-weight:bold}
+.down{color:#ff6377;font-weight:bold}
+.tv{
+  display:inline-block;
+  padding:5px 7px;
+  border-radius:6px;
+  border:1px solid #344155;
+  color:#9db5ff;
+  text-decoration:none;
+  font-size:11px
+}
+.footer{
+  color:#66758b;
+  text-align:center;
+  padding:20px 0;
+  font-size:11px
+}
+@media(max-width:800px){
+  .stats{grid-template-columns:1fr 1fr}
+  .grid{grid-template-columns:1fr}
+  th:nth-child(3),td:nth-child(3){display:none}
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+
+<div class="header">
+<h1>🚀 Crypto Top Gainers & Losers</h1>
+<div class="sub">
+GitHub-powered cryptocurrency market screener
+</div>
+
+<div class="controls">
+<select id="count">
+<option value="10">Top 10</option>
+<option value="20" selected>Top 20</option>
+<option value="30">Top 30</option>
+</select>
+
+<input id="search" placeholder="Search BTC, ETH, SOL...">
+
+<button onclick="loadData()">↻ Refresh</button>
+</div>
+</div>
+
+<div class="stats">
+<div class="stat">
+<span class="label">Market Coins</span>
+<b id="total">—</b>
+</div>
+<div class="stat">
+<span class="label">Advancing</span>
+<b id="adv">—</b>
+</div>
+<div class="stat">
+<span class="label">Declining</span>
+<b id="dec">—</b>
+</div>
+<div class="stat">
+<span class="label">Snapshot</span>
+<b id="date" style="font-size:14px">—</b>
+</div>
+</div>
+
+<div class="grid">
+
+<div class="panel gain">
+<h2>🟢 Top Gainers</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Coin</th>
+<th>Price</th>
+<th>24H</th>
+<th>Chart</th>
+</tr>
+</thead>
+<tbody id="gainers"></tbody>
+</table>
+</div>
+
+<div class="panel loss">
+<h2>🔴 Top Losers</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Coin</th>
+<th>Price</th>
+<th>24H</th>
+<th>Chart</th>
+</tr>
+</thead>
+<tbody id="losers"></tbody>
+</table>
+</div>
+
+</div>
+
+<div class="footer">
+Data source: GitHub public dataset · Dashboard hosted on GitHub Pages
+</div>
+
+</div>
+
+<script>
+
+const GITHUB_DATA =
+"https://raw.githubusercontent.com/UrvishAhir1/daily-crypto-tracker-dataset/main/top_100_cryptocurrency_market_latest.csv";
+
+let coins=[];
+
+function parseCSV(text){
+  const rows=[];
+  let row=[],cell="",quote=false;
+
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+
+    if(c=='"'){
+      if(quote && text[i+1]=='"'){
+        cell+='"';
+        i++;
+      }else{
+        quote=!quote;
+      }
+    }
+    else if(c==',' && !quote){
+      row.push(cell);
+      cell="";
+    }
+    else if((c=='\n'||c=='\r')&&!quote){
+      if(c=='\r' && text[i+1]=='\n')i++;
+      row.push(cell);
+      if(row.some(x=>x.trim()!==""))rows.push(row);
+      row=[];
+      cell="";
+    }
+    else cell+=c;
+  }
+
+  if(cell||row.length){
+    row.push(cell);
+    rows.push(row);
+  }
+
+  const headers=rows.shift().map(x=>x.trim());
+
+  return rows.map(r=>{
+    const o={};
+    headers.forEach((h,i)=>o[h]=r[i]??"");
+    return o;
+  });
+}
+
+function num(x){
+  const n=parseFloat(x);
+  return Number.isFinite(n)?n:0;
+}
+
+function money(x){
+  x=num(x);
+  if(x>=1000)
+    return "$"+x.toLocaleString(undefined,{maximumFractionDigits:2});
+  if(x>=1)
+    return "$"+x.toFixed(2);
+  return "$"+x.toPrecision(5);
+}
+
+function volume(x){
+  x=num(x);
+  if(x>=1e9)return "$"+(x/1e9).toFixed(2)+"B";
+  if(x>=1e6)return "$"+(x/1e6).toFixed(2)+"M";
+  if(x>=1e3)return "$"+(x/1e3).toFixed(1)+"K";
+  return "$"+x.toFixed(0);
+}
+
+function tradingView(symbol){
+  return "https://www.tradingview.com/symbols/"
+    +encodeURIComponent(symbol.toUpperCase()+"USDT")
+    +"/";
+}
+
+function render(){
+
+  const q=document.getElementById("search").value.toLowerCase();
+  const count=parseInt(document.getElementById("count").value);
+
+  let list=coins.filter(c=>{
+    return !q ||
+      String(c.name).toLowerCase().includes(q) ||
+      String(c.symbol).toLowerCase().includes(q);
+  });
+
+  const gainers=list
+    .filter(c=>num(c.price_change_percentage_24h)>0)
+    .sort((a,b)=>num(b.price_change_percentage_24h)-num(a.price_change_percentage_24h))
+    .slice(0,count);
+
+  const losers=list
+    .filter(c=>num(c.price_change_percentage_24h)<0)
+    .sort((a,b)=>num(a.price_change_percentage_24h)-num(b.price_change_percentage_24h))
+    .slice(0,count);
+
+  document.getElementById("gainers").innerHTML=
+    gainers.map((c,i)=>row(c,i+1,true)).join("");
+
+  document.getElementById("losers").innerHTML=
+    losers.map((c,i)=>row(c,i+1,false)).join("");
+
+  document.getElementById("total").textContent=coins.length;
+
+  const adv=coins.filter(c=>num(c.price_change_percentage_24h)>0).length;
+  const dec=coins.filter(c=>num(c.price_change_percentage_24h)<0).length;
+
+  document.getElementById("adv").textContent=adv;
+  document.getElementById("dec").textContent=dec;
+
+  const d=coins[0]?.fetch_date || coins[0]?.last_updated || "—";
+  document.getElementById("date").textContent=d;
+}
+
+function row(c,i,isGain){
+
+  const pct=num(c.price_change_percentage_24h);
+  const symbol=String(c.symbol||"").toUpperCase();
+
+  return `
+  <tr>
+    <td>${i}</td>
+    <td>
+      <div class="coin">${escapeHTML(c.name||symbol)}</div>
+      <div class="symbol">${escapeHTML(symbol)}</div>
+    </td>
+    <td>${money(c.current_price)}</td>
+    <td class="${isGain?'up':'down'}">
+      ${pct>0?'+':''}${pct.toFixed(2)}%
+    </td>
+    <td>
+      <a class="tv"
+         href="${tradingView(symbol)}"
+         target="_blank"
+         rel="noopener">
+         TV
+      </a>
+    </td>
+  </tr>`;
+}
+
+function escapeHTML(s){
+  return String(s)
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+
+async function loadData(){
+
+  try{
+
+    document.getElementById("date").textContent="Loading…";
+
+    /*
+      Later, our GitHub Actions workflow will create:
+      data/market.json
+
+      We try that first. If it doesn't exist yet,
+      we use the current public GitHub CSV as fallback.
+    */
+
+    let response=
+      await fetch("data/market.json?"+Date.now());
+
+    if(!response.ok){
+      response=await fetch(GITHUB_DATA+"?"+Date.now());
+      if(!response.ok)throw new Error("Data unavailable");
+
+      const text=await response.text();
+      coins=parseCSV(text);
+    }
+    else{
+      coins=await response.json();
+
+      if(!Array.isArray(coins)){
+        coins=coins.data||coins.coins||[];
+      }
+    }
+
+    render();
+
+  }catch(e){
+
+    document.getElementById("gainers").innerHTML=
+      `<tr><td colspan="5">Unable to load market data.</td></tr>`;
+
+    document.getElementById("losers").innerHTML=
+      `<tr><td colspan="5">Please try Refresh.</td></tr>`;
+
+    document.getElementById("date").textContent="Error";
+    console.error(e);
+  }
+}
+
+document.getElementById("search")
+  .addEventListener("input",render);
+
+document.getElementById("count")
+  .addEventListener("change",render);
+
+loadData();
+
+</script>
+</body>
+</html>
